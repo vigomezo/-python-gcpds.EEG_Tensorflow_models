@@ -94,9 +94,6 @@ class train_model_cv():
         History = []
         num_classes = len(np.unique(y))
         if val_mode=='schirrmeister2017':
-            
-            if val_mode=='schirrmeister2017':
-            
             if X_val != None:
                 X_tr, X_ts, y_tr, y_ts = X, Xval, y, y_val
             else:            
