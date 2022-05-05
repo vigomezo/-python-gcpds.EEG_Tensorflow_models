@@ -4,7 +4,8 @@ from EEG_Tensorflow_models.Utils.Losses import triplet_loss
 import tensorflow_addons as tfa
 import numpy as np
 import tensorflow as tf
-from sklearn.model_selection import train_test_split,StratifiedKFold
+from sklearn.model_selection import train_test_split,StratifiedKFold, GroupShuffleSplit
+
 
 def get_optimizer(optimizer,opt_args):#lr = 0.01,weight_decay = 0.0005):
     if optimizer == 'AdamW':
@@ -95,8 +96,14 @@ class train_model_cv():
         num_classes = len(np.unique(y))
         if val_mode=='schirrmeister2017':
             
-            X_tr, X_ts, y_tr, y_ts = X, Xval, y, y_val
-            
+            gss = GroupShuffleSplit(n_splits=1, train_size=.7)
+
+            for train_idx, valid_idx in gss.split(X, y, subject_tv):
+                X_tr = X_tv[train_idx]
+                y_tr = y_tv[train_idx]
+                X_ts = X_tv[valid_idx]
+                y_ts = y_tv[valid_idx]
+                            
             y_tr= tf.keras.utils.to_categorical(y_tr,num_classes=num_classes)
             y_ts= tf.keras.utils.to_categorical(y_ts,num_classes=num_classes)
 
