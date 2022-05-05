@@ -91,18 +91,15 @@ class train_model_cv():
         preds = self.model.predict(X)
         return preds
 
-    def fit_validation(self,X,y,X_val=None,y_val=None,subject_tv,batch_size=64,epochs=1000,verbose=1,val_mode=None,autoencoder=False,early_stopping=False,triplet_loss=False):
+    def fit_validation(self,X,y,X_val=Xtval,y_val=ytval,batch_size=64,epochs=1000,verbose=1,val_mode=None,autoencoder=False,early_stopping=False,triplet_loss=False):
         History = []
         num_classes = len(np.unique(y))
         if val_mode=='schirrmeister2017':
             
-            gss = GroupShuffleSplit(n_splits=1, train_size=.7)
-
-            for train_idx, valid_idx in gss.split(X, y, subject_tv):
-                X_tr = X_tv[train_idx]
-                y_tr = y_tv[train_idx]
-                X_ts = X_tv[valid_idx]
-                y_ts = y_tv[valid_idx]
+            X_tr = X
+            y_tr = y
+            X_ts = X_tval
+            y_ts = y_tval
                             
             y_tr= tf.keras.utils.to_categorical(y_tr,num_classes=num_classes)
             y_ts= tf.keras.utils.to_categorical(y_ts,num_classes=num_classes)
