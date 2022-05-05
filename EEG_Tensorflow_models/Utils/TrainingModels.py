@@ -98,8 +98,8 @@ class train_model_cv():
             
             X_tr = X
             y_tr = y
-            X_ts = X_tval
-            y_ts = y_tval
+            X_ts = X_val
+            y_ts = y_val
                             
             y_tr= tf.keras.utils.to_categorical(y_tr,num_classes=num_classes)
             y_ts= tf.keras.utils.to_categorical(y_ts,num_classes=num_classes)
