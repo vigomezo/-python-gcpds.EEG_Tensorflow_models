@@ -94,8 +94,14 @@ class train_model_cv():
         History = []
         num_classes = len(np.unique(y))
         if val_mode=='schirrmeister2017':
+            
+            if val_mode=='schirrmeister2017':
+            
+            if X_val != None:
+                X_tr, X_ts, y_tr, y_ts = X, Xval, y, y_val
+            else:            
+                X_tr, X_ts, y_tr, y_ts = train_test_split(X, y, test_size=0.2, random_state=self.seed)
 
-            X_tr, X_ts, y_tr, y_ts = train_test_split(X, y, test_size=0.2, random_state=self.seed)
             y_tr= tf.keras.utils.to_categorical(y_tr,num_classes=num_classes)
             y_ts= tf.keras.utils.to_categorical(y_ts,num_classes=num_classes)
 
