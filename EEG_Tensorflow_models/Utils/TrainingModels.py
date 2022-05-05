@@ -1,1 +1,279 @@
-{"metadata":{"kernelspec":{"language":"python","display_name":"Python 3","name":"python3"},"language_info":{"pygments_lexer":"ipython3","nbconvert_exporter":"python","version":"3.6.4","file_extension":".py","codemirror_mode":{"name":"ipython","version":3},"name":"python","mimetype":"text/x-python"}},"nbformat_minor":4,"nbformat":4,"cells":[{"cell_type":"code","source":"\nfrom EEG_Tensorflow_models.Models import DeepConvNet, EEGNet, ShallowConvNet, DMTL_BCI, TCNet_fusion, PST_attention, MTVAE, Shallownet_1conv2d, Shallownet_1conv2d_rff, MTVAE_1conv2d, MIN2NET\nfrom EEG_Tensorflow_models.Utils.Losses import triplet_loss\nimport tensorflow_addons as tfa\nimport numpy as np\nimport tensorflow as tf\nfrom sklearn.model_selection import train_test_split,StratifiedKFold\n\ndef get_optimizer(optimizer,opt_args):#lr = 0.01,weight_decay = 0.0005):\n    if optimizer == 'AdamW':\n        opt = tfa.optimizers.AdamW(learning_rate=opt_args['lr'],weight_decay=opt_args['weight_decay'])\n    elif optimizer == 'Adam':\n        opt = tf.keras.optimizers.Adam(learning_rate=opt_args['lr'],beta_1=opt_args['beta_1'],epsilon=opt_args['epsilon'])\n    return opt\n\ndef get_model(model_name,model_args):#, nb_classes=4, Chans =22, Samples = 250, dropoutRate = 0.5):\n    if model_name=='DeepConvNet':\n        model = DeepConvNet(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate =model_args['dropoutRate'],\n                            version='2017')\n    elif model_name=='EEGNet':\n        model = EEGNet(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'], \n                       kernLength = model_args['kernLength'], F1 = model_args['F1'], D = model_args['D'], F2 = model_args['F2'], norm_rate = model_args['norm_rate'], \n                       dropoutType = model_args['dropoutType'])\n    elif model_name=='ShallowConvNet':\n        model = ShallowConvNet(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'],\n                               version = model_args['version'])\n    elif model_name=='DMTL_BCI':\n        model = DMTL_BCI(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'])\n    elif model_name=='TCNet_fusion':\n        model = TCNet_fusion(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'],layers=model_args['layers'],\n                             kernel_s=model_args['kernel_s'],filt=model_args['filt'],dropout=model_args['dropout'],activation=model_args['activation'],F1=model_args['F1'],\n                             D=model_args['D'],kernLength=model_args['kernLength'],dropout_eeg=model_args['dropout_eeg'])\n    elif model_name == 'PST_attention':\n        model = PST_attention(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'],\\\n                              last_layer = model_args['last_layer'])\n    elif model_name == 'MTVAE':\n        model = MTVAE(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'])\n    elif model_name == 'Shallownet_1conv2d':\n        model = Shallownet_1conv2d(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'])\n    elif model_name == 'Shallownet_1conv2d_rff':\n        model = Shallownet_1conv2d_rff(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'])\n    elif model_name == 'MTVAE_1conv2d':\n        model = MTVAE_1conv2d(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'])\n    elif model_name == 'MIN2NET':\n        model = MIN2NET(nb_classes=model_args['nb_classes'], Chans=model_args['Chans'], Samples = model_args['Samples'], latent_dim=model_args['latent_dim'])\n    return model\n\ndef get_loss(loss_name):\n    loss = []\n    if type(loss_name)==str:\n        loss_name = [loss_name]\n    for i in loss_name:\n        print(i)\n        if i == 'CategoricalCrossentropy':\n            loss.append(tf.keras.losses.CategoricalCrossentropy())\n        elif i == 'mse':\n            loss.append(tf.keras.losses.MeanSquaredError())\n        elif i == 'triplet':\n            print('here!!!!')\n            loss.append(triplet_loss())\n        else:\n            loss.append(i)\n    return loss\n\n\nclass train_model_cv():\n    def __init__(self,model,optimizer,loss,metrics,callbacks=None,loss_weights=None , seed = 20200220):\n        super(train_model_cv,self).__init__()\n        self.model = model\n        self.optimizer = optimizer\n        self.loss = loss\n        self.metrics = metrics\n        self.callbacks = callbacks\n        self.seed = seed\n        self.loss_weights = loss_weights\n\n    \n    def create_model(self):\n        tf.keras.backend.clear_session()\n        tf.random.set_seed(self.seed)\n        self.model.compile(loss=self.loss, optimizer= self.optimizer, metrics=self.metrics, loss_weights=self.loss_weights)\n    \n    def fit_model(self,X,y,X_val,y_val,batch_size,epochs,verbose,callbacks,retrain=False):\n        if retrain==False:\n            self.create_model()\n        history= self.model.fit(X,y,validation_data=(X_val,y_val),batch_size=batch_size,epochs=epochs,verbose=verbose,callbacks=callbacks)\n        return history\n    \n    def predict(self,X):\n        preds = self.model.predict(X)\n        return preds\n\n    def fit_validation(self,X,y,X_val=None,y_val=None,batch_size=64,epochs=1000,verbose=1,val_mode=None,autoencoder=False,early_stopping=False,triplet_loss=False):\n        History = []\n        num_classes = len(np.unique(y))\n        if val_mode=='schirrmeister2017':\n            \n            if X_val != None:\n                X_tr, X_ts, y_tr, y_ts = X, Xval, y, y_val\n            else:            \n                X_tr, X_ts, y_tr, y_ts = train_test_split(X, y, test_size=0.2, random_state=self.seed)\n                \n            y_tr= tf.keras.utils.to_categorical(y_tr,num_classes=num_classes)\n            y_ts= tf.keras.utils.to_categorical(y_ts,num_classes=num_classes)\n\n            callbacks_names = [self.callbacks['early_stopping_train'],self.callbacks['checkpoint_train']]\n\n            if autoencoder and not triplet_loss:\n                y_tr = [X_tr,y_tr]\n                y_ts = [X_ts,y_ts]\n            elif autoencoder and triplet_loss:\n                print('aqui')\n                y_tr = [X_tr,np.argmax(y_tr,axis=1),y_tr]\n                y_ts = [X_ts,np.argmax(y_ts,axis=1),y_ts]\n                #callbacks_names.append(self.callbacks['CSVLogger'])\n                callbacks_names.append(self.callbacks['reduce_lr_train'])\n\n            history1 = self.fit_model(X_tr, y_tr,X_ts, y_ts,batch_size=batch_size,epochs=epochs,\n                                        verbose=verbose,callbacks=callbacks_names)\n            History.append(history1)\n            stop_epoch= np.argmin(history1.history['val_loss'])\n            loss_stop = history1.history['loss'][stop_epoch]\n\n\n            self.model.load_weights(self.callbacks['checkpoint_train'].filepath)\n            \n            self.callbacks['Threshold_valid'].threshold = loss_stop\n            self.callbacks['early_stopping_valid'].patience = (stop_epoch)*2\n            callbacks_names = [self.callbacks['Threshold_valid'],self.callbacks['checkpoint_valid'],\n                               self.callbacks['early_stopping_valid']]\n\n            y_train= tf.keras.utils.to_categorical(y,num_classes=num_classes)\n            y_valid= tf.keras.utils.to_categorical(y_val,num_classes=num_classes)\n\n            if autoencoder and not triplet_loss:\n                y_train = [X,y_train]\n                y_valid = [X_val,y_valid]\n            elif autoencoder and triplet_loss:\n                y_train = [X,np.argmax(y_train,axis=1),y_train]\n                y_valid = [X_val,np.argmax(y_valid,axis=1),y_valid]\n                #callbacks_names.append(self.callbacks['CSVLogger'])\n                callbacks_names.append(self.callbacks['reduce_lr_train'])\n\n            history2= self.fit_model(X,y_train,X_val, y_valid,batch_size=batch_size,epochs=(stop_epoch+1)*2,\n                                        verbose=verbose,callbacks=callbacks_names,retrain=True)\n            History.append(history2)\n            self.model.load_weights(self.callbacks['checkpoint_valid'].filepath)\n\n            if autoencoder:\n                self.preds = self.predict(X_val)[-1]\n            else:\n                self.preds = self.predict(X_val)\n\n            self.y_true = y_val\n        \n        elif val_mode=='schirrmeister2017_legal':\n\n            X_tr, X_ts, y_tr, y_ts = train_test_split(X, y, test_size=0.2, random_state=self.seed)\n            y_tr= tf.keras.utils.to_categorical(y_tr,num_classes=num_classes)\n            y_ts= tf.keras.utils.to_categorical(y_ts,num_classes=num_classes)\n\n            callbacks_names = [self.callbacks['early_stopping_train'],self.callbacks['checkpoint_train']]\n\n            if autoencoder:\n                y_tr = [X_tr,y_tr]\n                y_ts = [X_ts,y_ts]\n\n            history1 = self.fit_model(X_tr, y_tr,X_ts, y_ts,batch_size=batch_size,epochs=epochs,\n                                        verbose=verbose,callbacks=callbacks_names)\n            History.append(history1)\n            stop_epoch= np.argmin(history1.history['val_loss'])\n            loss_stop = history1.history['loss'][stop_epoch]\n\n            self.model.load_weights(self.callbacks['checkpoint_train'].filepath)\n            \n            self.callbacks['Threshold_valid'].threshold = loss_stop\n            self.callbacks['early_stopping_valid'].patience = (stop_epoch)*2\n            callbacks_names = [self.callbacks['Threshold_valid'],self.callbacks['checkpoint_valid'],\n                               self.callbacks['early_stopping_valid']]\n\n            y_train= tf.keras.utils.to_categorical(y,num_classes=num_classes)\n\n            if autoencoder:\n                y_train = [X,y_train]\n\n            history2= self.fit_model(X,y_train,X_ts, y_ts,batch_size=batch_size,epochs=(stop_epoch+1)*2,\n                                                            verbose=verbose,callbacks=callbacks_names,retrain=True)\n            History.append(history2)\n            self.model.load_weights(self.callbacks['checkpoint_valid'].filepath)\n\n            if autoencoder:\n                self.preds = self.predict(X_val)[-1]\n            else:\n                self.preds = self.predict(X_val)\n\n            self.y_true = y_val\n        \n        elif val_mode=='schirrmeister2021':\n\n            y_train= tf.keras.utils.to_categorical(y,num_classes=num_classes)\n            y_valid= tf.keras.utils.to_categorical(y_val,num_classes=num_classes)\n\n            callbacks_names = [self.callbacks['checkpoint_valid'],\n                               self.callbacks['early_stopping_valid']]\n\n            if autoencoder:\n                y_train = [X,y_train]\n                y_valid = [X_val,y_valid]\n\n            history= self.fit_model(X,y_train,X_val, y_valid,batch_size=batch_size,epochs=epochs,verbose=verbose,callbacks=callbacks_names)\n            History.append(history)\n\n            self.model.load_weights(self.callbacks['checkpoint_valid'].filepath)\n\n            if autoencoder:\n                self.preds = self.predict(X_val)[-1]\n            else:\n                self.preds = self.predict(X_val)\n\n            self.y_true = y_val\n        \n        elif val_mode=='lawhern2018':\n\n            preds = []\n            y_true = []\n            acc = []\n            c = 0\n\n            skf = StratifiedKFold(n_splits=4)\n\n            for train_index, test_index in skf.split(X, y):\n\n                X_train, X_test = X[train_index], X[test_index]\n                y_train, y_test = y[train_index], y[test_index]\n\n                X_tr, X_valid, y_tr, y_valid = train_test_split(X_train, y_train, test_size=0.3, random_state=self.seed)\n\n                #checkpointer = tf.keras.callbacks.ModelCheckpoint(filepath='/tmp/checkpoint.h5', verbose=0,save_best_only=True)\n                #callbacks_names = [self.callbacks['checkpoint_train'+str(c+1)]]\n                if early_stopping:\n                    callbacks_names = [self.callbacks['checkpoint_train'+str(c+1)],self.callbacks['early_stopping_train'+str(c+1)]]\n                else:\n                    callbacks_names = [self.callbacks['checkpoint_train'+str(c+1)]]\n\n                y_valid = tf.keras.utils.to_categorical(y_valid,num_classes=num_classes)\n                y_tr = tf.keras.utils.to_categorical(y_tr,num_classes=num_classes)\n\n                if autoencoder:\n                    y_tr    = [X_tr,y_tr]\n                    y_valid = [X_valid,y_valid]\n\n                #history= model.fit(X_tr,y_tr,validation_data=(X_val,y_val),batch_size=16,epochs=500,verbose=0,callbacks=[checkpointer],class_weight=class_weights)\n                history= self.fit_model(X_tr,y_tr,X_valid, y_valid,batch_size=batch_size,epochs=epochs,verbose=verbose,callbacks=callbacks_names)\n                History.append(history)\n\n                self.model.load_weights(self.callbacks['checkpoint_train'+str(c+1)].filepath)\n\n                if autoencoder:\n                    pred = self.predict(X_test)[-1]\n                else:\n                    pred = self.predict(X_test)\n\n                preds.append(pred)\n                y_preds = preds[c].argmax(axis = -1)\n                y_true.append(y_test)\n                acc.append(np.mean(y_preds == y_test))\n                print(\"Fold %d Classification accuracy: %f \" % (c+1,acc[c]))\n                c += 1\n\n            self.preds = np.concatenate(preds,axis=0)\n            self.y_true = np.concatenate(y_true,axis=0)\n\n        return History\n    \n    def get_pred_labels(self):\n        pred_labels = np.argmax(self.preds,axis=-1)\n        return pred_labels\n    \n    def get_accuracy(self,decimals=2):\n        pred_labels = self.get_pred_labels()\n        acc = np.mean(pred_labels==self.y_true)\n        return np.round(acc*100,decimals=decimals)","metadata":{"_uuid":"e306d20f-e426-459d-8efe-6d38e2cbc8e5","_cell_guid":"91d7d340-6d76-4423-8053-ed029bb56861","collapsed":false,"jupyter":{"outputs_hidden":false},"trusted":true},"execution_count":null,"outputs":[]}]}
+
+from EEG_Tensorflow_models.Models import DeepConvNet, EEGNet, ShallowConvNet, DMTL_BCI, TCNet_fusion, PST_attention, MTVAE, Shallownet_1conv2d, Shallownet_1conv2d_rff, MTVAE_1conv2d, MIN2NET
+from EEG_Tensorflow_models.Utils.Losses import triplet_loss
+import tensorflow_addons as tfa
+import numpy as np
+import tensorflow as tf
+from sklearn.model_selection import train_test_split,StratifiedKFold
+
+def get_optimizer(optimizer,opt_args):#lr = 0.01,weight_decay = 0.0005):
+    if optimizer == 'AdamW':
+        opt = tfa.optimizers.AdamW(learning_rate=opt_args['lr'],weight_decay=opt_args['weight_decay'])
+    elif optimizer == 'Adam':
+        opt = tf.keras.optimizers.Adam(learning_rate=opt_args['lr'],beta_1=opt_args['beta_1'],epsilon=opt_args['epsilon'])
+    return opt
+
+def get_model(model_name,model_args):#, nb_classes=4, Chans =22, Samples = 250, dropoutRate = 0.5):
+    if model_name=='DeepConvNet':
+        model = DeepConvNet(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate =model_args['dropoutRate'],
+                            version='2017')
+    elif model_name=='EEGNet':
+        model = EEGNet(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'], 
+                       kernLength = model_args['kernLength'], F1 = model_args['F1'], D = model_args['D'], F2 = model_args['F2'], norm_rate = model_args['norm_rate'], 
+                       dropoutType = model_args['dropoutType'])
+    elif model_name=='ShallowConvNet':
+        model = ShallowConvNet(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'],
+                               version = model_args['version'])
+    elif model_name=='DMTL_BCI':
+        model = DMTL_BCI(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'])
+    elif model_name=='TCNet_fusion':
+        model = TCNet_fusion(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'],layers=model_args['layers'],
+                             kernel_s=model_args['kernel_s'],filt=model_args['filt'],dropout=model_args['dropout'],activation=model_args['activation'],F1=model_args['F1'],
+                             D=model_args['D'],kernLength=model_args['kernLength'],dropout_eeg=model_args['dropout_eeg'])
+    elif model_name == 'PST_attention':
+        model = PST_attention(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'],\
+                              last_layer = model_args['last_layer'])
+    elif model_name == 'MTVAE':
+        model = MTVAE(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'])
+    elif model_name == 'Shallownet_1conv2d':
+        model = Shallownet_1conv2d(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'])
+    elif model_name == 'Shallownet_1conv2d_rff':
+        model = Shallownet_1conv2d_rff(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'])
+    elif model_name == 'MTVAE_1conv2d':
+        model = MTVAE_1conv2d(nb_classes=model_args['nb_classes'], Chans = model_args['Chans'], Samples = model_args['Samples'], dropoutRate = model_args['dropoutRate'])
+    elif model_name == 'MIN2NET':
+        model = MIN2NET(nb_classes=model_args['nb_classes'], Chans=model_args['Chans'], Samples = model_args['Samples'], latent_dim=model_args['latent_dim'])
+    return model
+
+def get_loss(loss_name):
+    loss = []
+    if type(loss_name)==str:
+        loss_name = [loss_name]
+    for i in loss_name:
+        print(i)
+        if i == 'CategoricalCrossentropy':
+            loss.append(tf.keras.losses.CategoricalCrossentropy())
+        elif i == 'mse':
+            loss.append(tf.keras.losses.MeanSquaredError())
+        elif i == 'triplet':
+            print('here!!!!')
+            loss.append(triplet_loss())
+        else:
+            loss.append(i)
+    return loss
+
+
+class train_model_cv():
+    def __init__(self,model,optimizer,loss,metrics,callbacks=None,loss_weights=None , seed = 20200220):
+        super(train_model_cv,self).__init__()
+        self.model = model
+        self.optimizer = optimizer
+        self.loss = loss
+        self.metrics = metrics
+        self.callbacks = callbacks
+        self.seed = seed
+        self.loss_weights = loss_weights
+
+    
+    def create_model(self):
+        tf.keras.backend.clear_session()
+        tf.random.set_seed(self.seed)
+        self.model.compile(loss=self.loss, optimizer= self.optimizer, metrics=self.metrics, loss_weights=self.loss_weights)
+    
+    def fit_model(self,X,y,X_val,y_val,batch_size,epochs,verbose,callbacks,retrain=False):
+        if retrain==False:
+            self.create_model()
+        history= self.model.fit(X,y,validation_data=(X_val,y_val),batch_size=batch_size,epochs=epochs,verbose=verbose,callbacks=callbacks)
+        return history
+    
+    def predict(self,X):
+        preds = self.model.predict(X)
+        return preds
+
+    def fit_validation(self,X,y,X_val=None,y_val=None,batch_size=64,epochs=1000,verbose=1,val_mode=None,autoencoder=False,early_stopping=False,triplet_loss=False):
+        History = []
+        num_classes = len(np.unique(y))
+        if val_mode=='schirrmeister2017':
+
+            X_tr, X_ts, y_tr, y_ts = train_test_split(X, y, test_size=0.2, random_state=self.seed)
+            y_tr= tf.keras.utils.to_categorical(y_tr,num_classes=num_classes)
+            y_ts= tf.keras.utils.to_categorical(y_ts,num_classes=num_classes)
+
+            callbacks_names = [self.callbacks['early_stopping_train'],self.callbacks['checkpoint_train']]
+
+            if autoencoder and not triplet_loss:
+                y_tr = [X_tr,y_tr]
+                y_ts = [X_ts,y_ts]
+            elif autoencoder and triplet_loss:
+                print('aqui')
+                y_tr = [X_tr,np.argmax(y_tr,axis=1),y_tr]
+                y_ts = [X_ts,np.argmax(y_ts,axis=1),y_ts]
+                #callbacks_names.append(self.callbacks['CSVLogger'])
+                callbacks_names.append(self.callbacks['reduce_lr_train'])
+
+            history1 = self.fit_model(X_tr, y_tr,X_ts, y_ts,batch_size=batch_size,epochs=epochs,
+                                        verbose=verbose,callbacks=callbacks_names)
+            History.append(history1)
+            stop_epoch= np.argmin(history1.history['val_loss'])
+            loss_stop = history1.history['loss'][stop_epoch]
+
+
+            self.model.load_weights(self.callbacks['checkpoint_train'].filepath)
+            
+            self.callbacks['Threshold_valid'].threshold = loss_stop
+            self.callbacks['early_stopping_valid'].patience = (stop_epoch)*2
+            callbacks_names = [self.callbacks['Threshold_valid'],self.callbacks['checkpoint_valid'],
+                               self.callbacks['early_stopping_valid']]
+
+            y_train= tf.keras.utils.to_categorical(y,num_classes=num_classes)
+            y_valid= tf.keras.utils.to_categorical(y_val,num_classes=num_classes)
+
+            if autoencoder and not triplet_loss:
+                y_train = [X,y_train]
+                y_valid = [X_val,y_valid]
+            elif autoencoder and triplet_loss:
+                y_train = [X,np.argmax(y_train,axis=1),y_train]
+                y_valid = [X_val,np.argmax(y_valid,axis=1),y_valid]
+                #callbacks_names.append(self.callbacks['CSVLogger'])
+                callbacks_names.append(self.callbacks['reduce_lr_train'])
+
+            history2= self.fit_model(X,y_train,X_val, y_valid,batch_size=batch_size,epochs=(stop_epoch+1)*2,
+                                        verbose=verbose,callbacks=callbacks_names,retrain=True)
+            History.append(history2)
+            self.model.load_weights(self.callbacks['checkpoint_valid'].filepath)
+
+            if autoencoder:
+                self.preds = self.predict(X_val)[-1]
+            else:
+                self.preds = self.predict(X_val)
+
+            self.y_true = y_val
+        
+        elif val_mode=='schirrmeister2017_legal':
+
+            X_tr, X_ts, y_tr, y_ts = train_test_split(X, y, test_size=0.2, random_state=self.seed)
+            y_tr= tf.keras.utils.to_categorical(y_tr,num_classes=num_classes)
+            y_ts= tf.keras.utils.to_categorical(y_ts,num_classes=num_classes)
+
+            callbacks_names = [self.callbacks['early_stopping_train'],self.callbacks['checkpoint_train']]
+
+            if autoencoder:
+                y_tr = [X_tr,y_tr]
+                y_ts = [X_ts,y_ts]
+
+            history1 = self.fit_model(X_tr, y_tr,X_ts, y_ts,batch_size=batch_size,epochs=epochs,
+                                        verbose=verbose,callbacks=callbacks_names)
+            History.append(history1)
+            stop_epoch= np.argmin(history1.history['val_loss'])
+            loss_stop = history1.history['loss'][stop_epoch]
+
+            self.model.load_weights(self.callbacks['checkpoint_train'].filepath)
+            
+            self.callbacks['Threshold_valid'].threshold = loss_stop
+            self.callbacks['early_stopping_valid'].patience = (stop_epoch)*2
+            callbacks_names = [self.callbacks['Threshold_valid'],self.callbacks['checkpoint_valid'],
+                               self.callbacks['early_stopping_valid']]
+
+            y_train= tf.keras.utils.to_categorical(y,num_classes=num_classes)
+
+            if autoencoder:
+                y_train = [X,y_train]
+
+            history2= self.fit_model(X,y_train,X_ts, y_ts,batch_size=batch_size,epochs=(stop_epoch+1)*2,
+                                                            verbose=verbose,callbacks=callbacks_names,retrain=True)
+            History.append(history2)
+            self.model.load_weights(self.callbacks['checkpoint_valid'].filepath)
+
+            if autoencoder:
+                self.preds = self.predict(X_val)[-1]
+            else:
+                self.preds = self.predict(X_val)
+
+            self.y_true = y_val
+        
+        elif val_mode=='schirrmeister2021':
+
+            y_train= tf.keras.utils.to_categorical(y,num_classes=num_classes)
+            y_valid= tf.keras.utils.to_categorical(y_val,num_classes=num_classes)
+
+            callbacks_names = [self.callbacks['checkpoint_valid'],
+                               self.callbacks['early_stopping_valid']]
+
+            if autoencoder:
+                y_train = [X,y_train]
+                y_valid = [X_val,y_valid]
+
+            history= self.fit_model(X,y_train,X_val, y_valid,batch_size=batch_size,epochs=epochs,verbose=verbose,callbacks=callbacks_names)
+            History.append(history)
+
+            self.model.load_weights(self.callbacks['checkpoint_valid'].filepath)
+
+            if autoencoder:
+                self.preds = self.predict(X_val)[-1]
+            else:
+                self.preds = self.predict(X_val)
+
+            self.y_true = y_val
+        
+        elif val_mode=='lawhern2018':
+
+            preds = []
+            y_true = []
+            acc = []
+            c = 0
+
+            skf = StratifiedKFold(n_splits=4)
+
+            for train_index, test_index in skf.split(X, y):
+
+                X_train, X_test = X[train_index], X[test_index]
+                y_train, y_test = y[train_index], y[test_index]
+
+                X_tr, X_valid, y_tr, y_valid = train_test_split(X_train, y_train, test_size=0.3, random_state=self.seed)
+
+                #checkpointer = tf.keras.callbacks.ModelCheckpoint(filepath='/tmp/checkpoint.h5', verbose=0,save_best_only=True)
+                #callbacks_names = [self.callbacks['checkpoint_train'+str(c+1)]]
+                if early_stopping:
+                    callbacks_names = [self.callbacks['checkpoint_train'+str(c+1)],self.callbacks['early_stopping_train'+str(c+1)]]
+                else:
+                    callbacks_names = [self.callbacks['checkpoint_train'+str(c+1)]]
+
+                y_valid = tf.keras.utils.to_categorical(y_valid,num_classes=num_classes)
+                y_tr = tf.keras.utils.to_categorical(y_tr,num_classes=num_classes)
+
+                if autoencoder:
+                    y_tr    = [X_tr,y_tr]
+                    y_valid = [X_valid,y_valid]
+
+                #history= model.fit(X_tr,y_tr,validation_data=(X_val,y_val),batch_size=16,epochs=500,verbose=0,callbacks=[checkpointer],class_weight=class_weights)
+                history= self.fit_model(X_tr,y_tr,X_valid, y_valid,batch_size=batch_size,epochs=epochs,verbose=verbose,callbacks=callbacks_names)
+                History.append(history)
+
+                self.model.load_weights(self.callbacks['checkpoint_train'+str(c+1)].filepath)
+
+                if autoencoder:
+                    pred = self.predict(X_test)[-1]
+                else:
+                    pred = self.predict(X_test)
+
+                preds.append(pred)
+                y_preds = preds[c].argmax(axis = -1)
+                y_true.append(y_test)
+                acc.append(np.mean(y_preds == y_test))
+                print("Fold %d Classification accuracy: %f " % (c+1,acc[c]))
+                c += 1
+
+            self.preds = np.concatenate(preds,axis=0)
+            self.y_true = np.concatenate(y_true,axis=0)
+
+        return History
+    
+    def get_pred_labels(self):
+        pred_labels = np.argmax(self.preds,axis=-1)
+        return pred_labels
+    
+    def get_accuracy(self,decimals=2):
+        pred_labels = self.get_pred_labels()
+        acc = np.mean(pred_labels==self.y_true)
+        return np.round(acc*100,decimals=decimals)
+
