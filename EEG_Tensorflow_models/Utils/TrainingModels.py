@@ -12,7 +12,9 @@ def get_optimizer(optimizer,opt_args):#lr = 0.01,weight_decay = 0.0005):
         opt = tfa.optimizers.AdamW(learning_rate=opt_args['lr'],weight_decay=opt_args['weight_decay'])
     elif optimizer == 'Adam':
         opt = tf.keras.optimizers.Adam(learning_rate=opt_args['lr'],beta_1=opt_args['beta_1'],epsilon=opt_args['epsilon'])
-    return opt
+    elif optimizer == 'SGD':
+        opt = tf.keras.optimizers.SGD(learning_rate=opt_args['lr'],momentum=opt_args['momentum'],clipnorm=opt_args['cln'])
+    return opt 
 
 def get_model(model_name,model_args):#, nb_classes=4, Chans =22, Samples = 250, dropoutRate = 0.5):
     if model_name=='DeepConvNet':
